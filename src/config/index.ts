@@ -2,6 +2,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Validate critical secrets in production
+if (isProduction && !process.env.QR_SECRET) {
+  throw new Error('QR_SECRET must be set in production');
+}
+
 export const config = {
   telegram: {
     botToken: process.env.BOT_TOKEN || '',
@@ -18,6 +25,7 @@ export const config = {
   api: {
     port: parseInt(process.env.API_PORT || '3000', 10),
     secret: process.env.API_SECRET || 'change-me-in-production',
+    key: process.env.API_KEY || 'change-me-in-production',
   },
   superadmin: {
     telegramIds: (process.env.SUPERADMIN_TELEGRAM_IDS || '')

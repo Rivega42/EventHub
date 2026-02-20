@@ -77,6 +77,21 @@ class RegistrationService {
     try {
       await client.query('BEGIN');
 
+      // Check ticket availability with lock
+      const { rows: ticketTypeRows } = await client.query(
+        'SELECT quantity, sold_count FROM ticket_types WHERE id = $1 FOR UPDATE',
+        [data.ticket_type_id]
+      );
+
+      if (!ticketTypeRows.length) {
+        throw new Error('Ticket type not found');
+      }
+
+      const ticketType = ticketTypeRows[0];
+      if (ticketType.quantity && ticketType.sold_count >= ticketType.quantity) {
+        throw new Error('Tickets sold out');
+      }
+
       // Create registration
       const { rows } = await client.query<Registration>(
         `INSERT INTO registrations (event_id, user_id, ticket_type_id, reg_data)

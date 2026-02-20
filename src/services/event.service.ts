@@ -86,17 +86,26 @@ class EventService {
   }
 
   async update(id: number, data: Partial<CreateEventData>): Promise<Event> {
+    const allowedFields = [
+      'slug', 'title', 'description', 'venue', 'venue_map_url',
+      'city', 'starts_at', 'ends_at', 'timezone', 'max_attendees', 'settings'
+    ];
+
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;
 
     Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined) {
+      if (value !== undefined && allowedFields.includes(key)) {
         fields.push(`${key} = $${idx}`);
         values.push(value);
         idx++;
       }
     });
+
+    if (fields.length === 0) {
+      throw new Error('No valid fields to update');
+    }
 
     fields.push(`updated_at = NOW()`);
     values.push(id);

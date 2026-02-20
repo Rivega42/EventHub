@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { timingSafeEqual } from 'crypto';
 import QRCode from 'qrcode';
 import config from '../config';
 
@@ -13,8 +14,7 @@ class QrService {
     return crypto
       .createHmac('sha256', this.secret)
       .update(qrToken)
-      .digest('hex')
-      .substring(0, 16);
+      .digest('hex');
   }
 
   generatePayload(qrToken: string): string {
@@ -41,7 +41,9 @@ class QrService {
     const [, qrToken, providedHmac] = parts;
     const expectedHmac = this.generateHmac(qrToken);
 
-    if (providedHmac !== expectedHmac) {
+    const a = Buffer.from(providedHmac, 'hex');
+    const b = Buffer.from(expectedHmac, 'hex');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       return { valid: false };
     }
 

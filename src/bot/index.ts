@@ -49,11 +49,6 @@ bot.command('help', (ctx) => {
   );
 });
 
-// Error handler
-bot.catch(errorHandler);
-
-export default bot;
-
 // Callback query handlers
 bot.callbackQuery(/^reg:/, async (ctx) => {
   const eventId = parseInt(ctx.callbackQuery.data.split(':')[1], 10);
@@ -92,3 +87,8 @@ bot.callbackQuery(/^event:/, async (ctx) => {
   }
   await ctx.answerCallbackQuery();
 });
+
+// Error handler (must be after all handlers)
+bot.catch(errorHandler);
+
+export default bot;

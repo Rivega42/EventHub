@@ -60,17 +60,26 @@ class UserService {
   }
 
   async update(id: number, data: Partial<CreateUserData>): Promise<User> {
+    const allowedFields = [
+      'telegram_username', 'first_name', 'last_name',
+      'phone', 'email', 'company'
+    ];
+
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;
 
     Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined) {
+      if (value !== undefined && allowedFields.includes(key)) {
         fields.push(`${key} = $${idx}`);
         values.push(value);
         idx++;
       }
     });
+
+    if (fields.length === 0) {
+      throw new Error('No valid fields to update');
+    }
 
     fields.push(`updated_at = NOW()`);
     values.push(id);
