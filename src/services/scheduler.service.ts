@@ -80,6 +80,7 @@ class SchedulerService {
        JOIN users u ON sb.user_id = u.id
        JOIN sessions s ON sb.session_id = s.id
        WHERE s.starts_at BETWEEN $1 AND $2
+       AND u.bot_blocked = false
        AND NOT EXISTS (
          SELECT 1 FROM sent_notifications sn
          WHERE sn.user_id = u.id
@@ -124,6 +125,7 @@ class SchedulerService {
        JOIN events e ON r.event_id = e.id
        WHERE e.starts_at BETWEEN $1 AND $2
        AND r.status IN ('pending', 'confirmed', 'checked_in')
+       AND u.bot_blocked = false
        AND NOT EXISTS (
          SELECT 1 FROM sent_notifications sn
          WHERE sn.user_id = u.id
@@ -176,8 +178,19 @@ class SchedulerService {
          ON CONFLICT (user_id, notification_type, entity_id, time_offset) DO NOTHING`,
         [data.user_id, 'session_reminder', data.session_id, timeOffset]
       );
-    } catch (error) {
-      console.error(`Failed to send session reminder to ${data.telegram_id}:`, error);
+    } catch (err: any) {
+      if (err?.error_code === 403) {
+        // User blocked the bot — mark and stop sending
+        await pool.query(
+          'UPDATE users SET bot_blocked = true WHERE telegram_id = $1',
+          [data.telegram_id]
+        );
+        console.log(`User ${data.telegram_id} blocked the bot, marked in DB`);
+        return;
+      }
+      // Other errors — log and rethrow
+      console.error(`Failed to send session reminder to ${data.telegram_id}:`, err);
+      throw err;
     }
   }
 
@@ -223,8 +236,19 @@ class SchedulerService {
          ON CONFLICT (user_id, notification_type, entity_id, time_offset) DO NOTHING`,
         [data.user_id, 'event_reminder', data.event_id, timeOffset]
       );
-    } catch (error) {
-      console.error(`Failed to send event reminder to ${data.telegram_id}:`, error);
+    } catch (err: any) {
+      if (err?.error_code === 403) {
+        // User blocked the bot — mark and stop sending
+        await pool.query(
+          'UPDATE users SET bot_blocked = true WHERE telegram_id = $1',
+          [data.telegram_id]
+        );
+        console.log(`User ${data.telegram_id} blocked the bot, marked in DB`);
+        return;
+      }
+      // Other errors — log and rethrow
+      console.error(`Failed to send event reminder to ${data.telegram_id}:`, err);
+      throw err;
     }
   }
 }
