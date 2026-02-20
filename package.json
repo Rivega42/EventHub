@@ -11,32 +11,33 @@
     "lint": "eslint src --ext .ts",
     "format": "prettier --write 'src/**/*.ts'"
   },
-  "keywords": ["telegram", "bot", "events", "saas"],
+  "keywords": [
+    "telegram",
+    "bot",
+    "events",
+    "saas"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "grammy": "^1.21.1",
     "@grammyjs/conversations": "^1.2.0",
-    "fastify": "^4.26.1",
-    "pg": "^8.11.3",
     "dotenv": "^16.4.1",
+    "fastify": "^4.26.1",
+    "grammy": "^1.21.1",
+    "pg": "^8.11.3",
     "qrcode": "^1.5.3",
-    "jsqr": "^1.4.0",
-    "sharp": "^0.33.2",
-    "zod": "^3.22.4",
-    "uuid": "^9.0.1"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.17",
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.5",
-    "@types/uuid": "^9.0.8",
-    "typescript": "^5.3.3",
-    "tsx": "^4.7.1",
-    "eslint": "^8.56.0",
-    "@typescript-eslint/parser": "^6.20.0",
     "@typescript-eslint/eslint-plugin": "^6.20.0",
+    "@typescript-eslint/parser": "^6.20.0",
+    "eslint": "^8.56.0",
     "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
     "vitest": "^1.2.2"
   }
 }
