@@ -2,6 +2,8 @@ import { BotContext } from '../context';
 import { InlineKeyboard } from 'grammy';
 import eventService from '../../services/event.service';
 import paymentService from '../../services/payment.service';
+import eventPinService from '../../services/event-pin.service';
+import notificationService from '../../services/notification.service';
 import pool from '../../db/pool';
 
 export default async function adminHandler(ctx: BotContext): Promise<void> {
@@ -68,6 +70,14 @@ export async function handleAdminCallback(ctx: BotContext): Promise<void> {
   } else if (action === 'reject_pay' && parts[2]) {
     const paymentId = parseInt(parts[2], 10);
     await rejectPayment(ctx, paymentId);
+  } else if (action === 'generate_pin' && parts[2]) {
+    const eventId = parseInt(parts[2], 10);
+    await generateCheckinPin(ctx, eventId);
+  } else if (action === 'stats' && parts[2]) {
+    const eventId = parseInt(parts[2], 10);
+    await sendEventStats(ctx, eventId);
+  } else if (action === 'back') {
+    await adminHandler(ctx);
   }
 
   await ctx.answerCallbackQuery();
@@ -104,9 +114,32 @@ async function showEventDashboard(ctx: BotContext, eventId: number): Promise<voi
     .text('👥 Участники', `admin:registrations:${eventId}`)
     .text('📢 Рассылка', `admin:broadcast:${eventId}`)
     .row()
+    .text('🔑 Генерировать PIN', `admin:generate_pin:${eventId}`)
+    .text('📊 Статистика', `admin:stats:${eventId}`)
+    .row()
     .text('« Назад', 'admin:back');
 
   await ctx.editMessageText(message, { reply_markup: keyboard });
+}
+
+async function generateCheckinPin(ctx: BotContext, eventId: number): Promise<void> {
+  const pin = await eventPinService.generatePin(eventId);
+
+  await ctx.editMessageText(
+    `🔑 PIN для check-in сгенерирован:\n\n` +
+      `<code>${pin}</code>\n\n` +
+      `Волонтёры должны ввести этот PIN при запуске команды /scan.\n` +
+      `PIN можно изменить в любое время.`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard().text('« Назад', `admin:event:${eventId}`),
+    }
+  );
+}
+
+async function sendEventStats(ctx: BotContext, eventId: number): Promise<void> {
+  await notificationService.sendEventSummary(ctx.api, eventId);
+  await ctx.answerCallbackQuery({ text: '📊 Статистика отправлена в личные сообщения' });
 }
 
 async function showPaymentQueue(ctx: BotContext, eventId: number): Promise<void> {
@@ -146,23 +179,15 @@ async function showPaymentQueue(ctx: BotContext, eventId: number): Promise<void>
 async function confirmPayment(ctx: BotContext, paymentId: number): Promise<void> {
   if (!ctx.userId) return;
 
-  await paymentService.confirm(paymentId, ctx.userId);
-  await ctx.answerCallbackQuery({ text: '✅ Оплата подтверждена!' });
+  // Import ticket service
+  const ticketService = (await import('../../services/ticket.service')).default;
 
-  // Notify user
-  const payment = await paymentService.findById(paymentId);
-  if (payment) {
-    const { rows } = await pool.query(
-      'SELECT u.telegram_id FROM users u JOIN registrations r ON u.id = r.user_id WHERE r.id = $1',
-      [payment.registration_id]
-    );
-    if (rows[0]) {
-      await ctx.api.sendMessage(
-        rows[0].telegram_id,
-        '🎉 Ваша оплата подтверждена! Билет готов.'
-      );
-    }
-  }
+  // Confirm payment and send ticket
+  await paymentService.confirm(paymentId, ctx.userId, async (registrationId) => {
+    await ticketService.sendTicket(ctx.api, registrationId);
+  });
+
+  await ctx.answerCallbackQuery({ text: '✅ Оплата подтверждена!' });
 
   // Reload payment queue
   const { rows: eventRows } = await pool.query(

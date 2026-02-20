@@ -1,4 +1,4 @@
-import { Context } from 'grammy';
+import { Context, SessionFlavor } from 'grammy';
 import { ConversationFlavor } from '@grammyjs/conversations';
 
 export interface SessionData {
@@ -8,8 +8,7 @@ export interface SessionData {
   paymentId?: number;
 }
 
-export interface BotContext extends Context, ConversationFlavor {
-  session: SessionData;
+export type BotContext = Context & SessionFlavor<SessionData> & ConversationFlavor & {
   userId?: number;
   telegramId: number;
-}
+};
