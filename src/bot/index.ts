@@ -13,6 +13,12 @@ import dashboardHandler, { handleDashboardCallback } from './handlers/dashboard'
 import broadcastHandler, { handleBroadcastCallback, handleBroadcastMessage } from './handlers/broadcast';
 import exportHandler, { handleExportCallback } from './handlers/export';
 import roleHandler, { handleRoleCallback, handleRoleCommand } from './handlers/role';
+import { handleFeedbackCallback, handleFeedbackCommentMessage } from './handlers/feedback';
+import surveyHandler, { handleSurveyCallback, handleSurveyImprovementMessage } from './handlers/survey';
+import mapHandler, { handleMapCallback } from './handlers/map';
+
+// Services
+import schedulerService from '../services/scheduler.service';
 
 // Conversations
 import { registrationConversation } from './conversations/registration';
@@ -52,6 +58,8 @@ bot.command('schedule', scheduleHandler);
 bot.command('dashboard', dashboardHandler);
 bot.command('broadcast', broadcastHandler);
 bot.command('export', exportHandler);
+bot.command('survey', surveyHandler);
+bot.command('map', mapHandler);
 bot.command('role', async (ctx) => {
   // Check if it's a role command with params (e.g., /role add @user role)
   if (ctx.message?.text && ctx.message.text.split(' ').length > 2) {
@@ -62,6 +70,9 @@ bot.command('role', async (ctx) => {
 });
 bot.command('cancel', async (ctx) => {
   ctx.session.registrationStep = undefined;
+  ctx.session.pendingFeedback = undefined;
+  ctx.session.surveyState = undefined;
+  ctx.session.awaitingImprovement = false;
   await ctx.reply('❌ Операция отменена');
 });
 bot.command('help', (ctx) => {
@@ -75,6 +86,8 @@ bot.command('help', (ctx) => {
       '/export - Экспорт данных\n' +
       '/role - Управление ролями\n' +
       '/scan - QR-сканер (для волонтёров)\n' +
+      '/survey - Итоговый опрос\n' +
+      '/map - Схема площадки\n' +
       '/help - Справка'
   );
 });
@@ -96,6 +109,9 @@ bot.callbackQuery(/^dashboard:/, handleDashboardCallback);
 bot.callbackQuery(/^broadcast:/, handleBroadcastCallback);
 bot.callbackQuery(/^export:/, handleExportCallback);
 bot.callbackQuery(/^role:/, handleRoleCallback);
+bot.callbackQuery(/^feedback:/, handleFeedbackCallback);
+bot.callbackQuery(/^survey:/, handleSurveyCallback);
+bot.callbackQuery(/^map:/, handleMapCallback);
 
 bot.callbackQuery(/^event:/, async (ctx) => {
   const eventId = parseInt(ctx.callbackQuery.data.split(':')[1], 10);
@@ -147,15 +163,32 @@ bot.on('message:photo', handleScanPhoto);
 
 // Handle text messages (PIN input, broadcast messages, etc.)
 bot.on('message:text', async (ctx) => {
-  // Try broadcast message handler first
+  // Try different handlers in order
+  
+  // 1. Survey improvement
+  if (ctx.session.awaitingImprovement) {
+    await handleSurveyImprovementMessage(ctx);
+    return;
+  }
+  
+  // 2. Feedback comment (when pendingFeedback exists and callback is 'add_comment')
+  if (ctx.session.pendingFeedback) {
+    await handleFeedbackCommentMessage(ctx);
+    return;
+  }
+  
+  // 3. Broadcast message
   const handled = await handleBroadcastMessage(ctx);
   if (!handled) {
-    // Fall back to PIN input handler
+    // 4. Fall back to PIN input handler
     await handlePinInput(ctx);
   }
 });
 
 // Error handler (must be after all handlers)
 bot.catch(errorHandler);
+
+// Initialize scheduler service
+schedulerService.initialize(bot);
 
 export default bot;

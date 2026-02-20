@@ -38,6 +38,14 @@ class RegistrationService {
     return rows[0] || null;
   }
 
+  async findByUserId(userId: number): Promise<Registration[]> {
+    const { rows } = await pool.query<Registration>(
+      'SELECT * FROM registrations WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    return rows;
+  }
+
   async findByQrToken(qrToken: string): Promise<Registration | null> {
     const { rows } = await pool.query<Registration>(
       'SELECT * FROM registrations WHERE qr_token = $1',
