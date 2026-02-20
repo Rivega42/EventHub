@@ -1,0 +1,43 @@
+{
+  "name": "eventhub-bot",
+  "version": "1.0.0",
+  "description": "EventHub - SaaS platform for event management via Telegram",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate": "node dist/db/migrate.js",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write 'src/**/*.ts'"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "events",
+    "saas"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@grammyjs/conversations": "^1.2.0",
+    "dotenv": "^16.4.1",
+    "fastify": "^4.26.1",
+    "grammy": "^1.21.1",
+    "pg": "^8.11.3",
+    "qrcode": "^1.5.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "@types/pg": "^8.11.0",
+    "@types/qrcode": "^1.5.5",
+    "@typescript-eslint/eslint-plugin": "^6.20.0",
+    "@typescript-eslint/parser": "^6.20.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.2"
+  }
+}
