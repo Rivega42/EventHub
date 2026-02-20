@@ -2,6 +2,8 @@ import { Api } from 'grammy';
 import pool from '../db/pool';
 
 class NotificationService {
+  private lastNotificationTime: Map<number, number> = new Map();
+  private readonly RATE_LIMIT_MS = 1000; // 1 second between notifications per organizer
   /**
    * Notify organizers about new registration
    */
@@ -156,7 +158,18 @@ class NotificationService {
   private async sendToOrganizers(api: Api, telegramIds: number[], message: string): Promise<void> {
     for (const telegramId of telegramIds) {
       try {
+        // Rate limiting: wait if needed
+        const lastTime = this.lastNotificationTime.get(telegramId) || 0;
+        const now = Date.now();
+        const timeSinceLastNotification = now - lastTime;
+        
+        if (timeSinceLastNotification < this.RATE_LIMIT_MS) {
+          const waitTime = this.RATE_LIMIT_MS - timeSinceLastNotification;
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        
         await api.sendMessage(telegramId, message);
+        this.lastNotificationTime.set(telegramId, Date.now());
       } catch (err) {
         console.error(`Failed to send notification to ${telegramId}:`, err);
       }

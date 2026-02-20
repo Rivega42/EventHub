@@ -56,28 +56,38 @@ export async function handleMyTicket(ctx: BotContext): Promise<void> {
 }
 
 export async function handleTicketCallback(ctx: BotContext): Promise<void> {
-  const data = ctx.callbackQuery?.data;
-  if (!data) return;
+  try {
+    const data = ctx.callbackQuery?.data;
+    if (!data) return;
 
-  const parts = data.split(':');
-  const action = parts[0];
-  const ticketTypeId = parts.length > 1 ? parseInt(parts[1], 10) : undefined;
+    const parts = data.split(':');
+    const action = parts[0];
+    const ticketTypeId = parts.length > 1 ? parseInt(parts[1], 10) : undefined;
 
-  if (action === 'select_ticket' && ticketTypeId) {
-    await handleTicketSelection(ctx, ticketTypeId);
+    if (action === 'select_ticket' && ticketTypeId) {
+      await handleTicketSelection(ctx, ticketTypeId);
+    }
+
+    await ctx.answerCallbackQuery();
+  } catch (err) {
+    console.error('Error in handleTicketCallback:', err);
+    await ctx.answerCallbackQuery({ text: '❌ Ошибка' });
   }
-
-  await ctx.answerCallbackQuery();
 }
 
 async function handleTicketSelection(ctx: BotContext, ticketTypeId: number): Promise<void> {
-  // This will be handled by registration conversation
-  // Store selected ticket in session
-  ctx.session.registrationStep = `ticket_selected:${ticketTypeId}`;
+  try {
+    // This will be handled by registration conversation
+    // Store selected ticket in session
+    ctx.session.registrationStep = `ticket_selected:${ticketTypeId}`;
 
-  const keyboard = new InlineKeyboard().text('✅ Подтвердить выбор', 'confirm_ticket');
+    const keyboard = new InlineKeyboard().text('✅ Подтвердить выбор', 'confirm_ticket');
 
-  await ctx.editMessageText('Подтвердите выбор билета:', {
-    reply_markup: keyboard,
-  });
+    await ctx.editMessageText('Подтвердите выбор билета:', {
+      reply_markup: keyboard,
+    });
+  } catch (err) {
+    console.error('Error in handleTicketSelection:', err);
+    await ctx.reply('❌ Ошибка при выборе билета');
+  }
 }

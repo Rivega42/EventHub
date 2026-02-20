@@ -35,8 +35,18 @@ export async function registrationConversation(
 
   // Step 2: Email
   await ctx.reply('📧 Ваш email?');
-  const emailCtx = await conversation.waitFor('message:text');
-  const email = emailCtx.message.text.trim();
+  let email = '';
+  while (!email) {
+    const emailCtx = await conversation.waitFor('message:text');
+    const inputEmail = emailCtx.message.text.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    if (emailRegex.test(inputEmail)) {
+      email = inputEmail;
+    } else {
+      await ctx.reply('❌ Некорректный email. Попробуйте снова:');
+    }
+  }
 
   // Step 3: Phone
   await ctx.reply('📱 Телефон?', {
@@ -46,9 +56,18 @@ export async function registrationConversation(
       one_time_keyboard: true,
     },
   });
-  const phoneCtx = await conversation.waitFor(['message:contact', 'message:text']);
-  const phone =
-    phoneCtx.message.contact?.phone_number || phoneCtx.message.text?.trim() || '';
+  let phone = '';
+  while (!phone) {
+    const phoneCtx = await conversation.waitFor(['message:contact', 'message:text']);
+    const inputPhone = phoneCtx.message.contact?.phone_number || phoneCtx.message.text?.trim() || '';
+    const phoneDigits = inputPhone.replace(/\D/g, '');
+    
+    if (phoneDigits.length >= 10) {
+      phone = inputPhone;
+    } else {
+      await ctx.reply('❌ Некорректный телефон. Минимум 10 цифр. Попробуйте снова:');
+    }
+  }
 
   // Step 4: Company (optional)
   const skipKeyboard = new InlineKeyboard().text('Пропустить', 'skip_company');

@@ -1,5 +1,6 @@
 import pool from '../db/pool';
 import crypto from 'crypto';
+import config from '../config';
 
 class EventPinService {
   /**
@@ -7,7 +8,7 @@ class EventPinService {
    */
   async generatePin(eventId: number): Promise<string> {
     const pin = this.generateRandomPin();
-    const pinHash = this.hashPin(pin);
+    const pinHash = this.hashPin(pin, eventId);
 
     await pool.query(
       `UPDATE events 
@@ -37,7 +38,7 @@ class EventPinService {
     }
 
     const expectedHash = rows[0].pin_hash;
-    const providedHash = this.hashPin(pin);
+    const providedHash = this.hashPin(pin, eventId);
 
     return expectedHash === providedHash;
   }
@@ -71,8 +72,9 @@ class EventPinService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  private hashPin(pin: string): string {
-    return crypto.createHash('sha256').update(pin).digest('hex');
+  private hashPin(pin: string, eventId: number): string {
+    const salt = config.qr.secret;
+    return crypto.createHmac('sha256', salt).update(`${eventId}:${pin}`).digest('hex');
   }
 }
 
