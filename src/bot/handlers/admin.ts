@@ -77,6 +77,15 @@ export async function handleAdminCallback(ctx: BotContext): Promise<void> {
     } else if (action === 'stats' && parts[2]) {
       const eventId = parseInt(parts[2], 10);
       await sendEventStats(ctx, eventId);
+    } else if (action === 'schedule' && parts[2]) {
+      const eventId = parseInt(parts[2], 10);
+      const { showSchedule } = await import('./schedule');
+      await showSchedule(ctx, eventId);
+    } else if (action === 'broadcast' && parts[2]) {
+      const eventId = parseInt(parts[2], 10);
+      const broadcastHandler = await import('./broadcast');
+      ctx.session.currentEventId = eventId;
+      await broadcastHandler.default(ctx);
     } else if (action === 'back') {
       await adminHandler(ctx);
     }
@@ -112,16 +121,16 @@ async function showEventDashboard(ctx: BotContext, eventId: number): Promise<voi
     }
 
     const keyboard = new InlineKeyboard()
-      .text('🎫 Билеты и оплаты', `admin:payments:${eventId}`)
+      .text('📊 Дашборд', `dashboard:show:${eventId}`)
+      .text('📢 Рассылка', `broadcast:select:${eventId}`)
       .row()
-      .text('📋 Программа', `admin:schedule:${eventId}`)
-      .text('💳 Карты оплаты', `admin:cards:${eventId}`)
+      .text('📋 Программа', `schedule:select:${eventId}`)
+      .text('📥 Экспорт', `export:select:${eventId}`)
       .row()
-      .text('👥 Участники', `admin:registrations:${eventId}`)
-      .text('📢 Рассылка', `admin:broadcast:${eventId}`)
+      .text('🎫 Оплаты', `admin:payments:${eventId}`)
+      .text('👥 Роли', `role:select:${eventId}`)
       .row()
       .text('🔑 Генерировать PIN', `admin:generate_pin:${eventId}`)
-      .text('📊 Статистика', `admin:stats:${eventId}`)
       .row()
       .text('« Назад', 'admin:back');
 
