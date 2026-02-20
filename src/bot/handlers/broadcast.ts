@@ -229,12 +229,40 @@ export async function handleBroadcastCallback(ctx: BotContext): Promise<void> {
 
     if (action === 'select') {
       const eventId = parseInt(parts[2], 10);
+      
+      // Check authorization
+      if (!ctx.userId) {
+        await ctx.answerCallbackQuery('⛔ Ошибка авторизации');
+        return;
+      }
+      
+      const { rows: userRoles } = await pool.query(
+        'SELECT role FROM event_roles WHERE user_id = $1 AND event_id = $2',
+        [ctx.userId, eventId]
+      );
+      
+      if (!userRoles.some(r => r.role === 'organizer')) {
+        await ctx.answerCallbackQuery('⛔ Нет доступа');
+        return;
+      }
+      
       await startBroadcast(ctx, eventId);
     } else if (action === 'filter') {
       const eventId = parseInt(parts[2], 10);
       const filterType = parts[3];
 
       if (!ctx.userId) return;
+      
+      // Check authorization
+      const { rows: userRoles } = await pool.query(
+        'SELECT role FROM event_roles WHERE user_id = $1 AND event_id = $2',
+        [ctx.userId, eventId]
+      );
+      
+      if (!userRoles.some(r => r.role === 'organizer')) {
+        await ctx.answerCallbackQuery('⛔ Нет доступа');
+        return;
+      }
 
       const session = broadcastSessions.get(ctx.userId) || { eventId, filter: { eventId } };
       
@@ -257,6 +285,17 @@ export async function handleBroadcastCallback(ctx: BotContext): Promise<void> {
       const ticketTypeId = parseInt(parts[3], 10);
 
       if (!ctx.userId) return;
+      
+      // Check authorization
+      const { rows: userRoles } = await pool.query(
+        'SELECT role FROM event_roles WHERE user_id = $1 AND event_id = $2',
+        [ctx.userId, eventId]
+      );
+      
+      if (!userRoles.some(r => r.role === 'organizer')) {
+        await ctx.answerCallbackQuery('⛔ Нет доступа');
+        return;
+      }
 
       const session = broadcastSessions.get(ctx.userId) || { eventId, filter: { eventId } };
       session.filter = { eventId, ticketTypeId };
@@ -264,6 +303,28 @@ export async function handleBroadcastCallback(ctx: BotContext): Promise<void> {
 
       await requestBroadcastMessage(ctx);
     } else if (action === 'confirm') {
+      // Check authorization
+      if (!ctx.userId) {
+        await ctx.answerCallbackQuery('⛔ Ошибка авторизации');
+        return;
+      }
+      
+      const session = broadcastSessions.get(ctx.userId);
+      if (!session) {
+        await ctx.answerCallbackQuery('⛔ Сессия не найдена');
+        return;
+      }
+      
+      const { rows: userRoles } = await pool.query(
+        'SELECT role FROM event_roles WHERE user_id = $1 AND event_id = $2',
+        [ctx.userId, session.eventId]
+      );
+      
+      if (!userRoles.some(r => r.role === 'organizer')) {
+        await ctx.answerCallbackQuery('⛔ Нет доступа');
+        return;
+      }
+      
       await executeBroadcast(ctx);
       return; // Don't answer callback query here, executeBroadcast handles it
     } else if (action === 'cancel') {

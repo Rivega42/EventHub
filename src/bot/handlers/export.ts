@@ -78,6 +78,22 @@ export async function handleExportCallback(ctx: BotContext): Promise<void> {
     const eventId = parseInt(parts[2], 10);
 
     if (action === 'select') {
+      // Check authorization
+      if (!ctx.userId) {
+        await ctx.answerCallbackQuery('⛔ Ошибка авторизации');
+        return;
+      }
+      
+      const { rows: userRoles } = await pool.query(
+        'SELECT role FROM event_roles WHERE user_id = $1 AND event_id = $2',
+        [ctx.userId, eventId]
+      );
+      
+      if (!userRoles.some(r => r.role === 'organizer')) {
+        await ctx.answerCallbackQuery('⛔ Нет доступа');
+        return;
+      }
+      
       await generateExport(ctx, eventId);
     }
 

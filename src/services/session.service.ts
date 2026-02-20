@@ -164,26 +164,21 @@ class SessionService {
   }
 
   async toggleBookmark(userId: number, sessionId: number): Promise<boolean> {
-    const { rows } = await pool.query<{ exists: boolean }>(
-      'SELECT EXISTS(SELECT 1 FROM session_bookmarks WHERE user_id = $1 AND session_id = $2)',
+    // Atomic toggle using CTE to prevent race condition
+    const { rows } = await pool.query(
+      `WITH deleted AS (
+        DELETE FROM session_bookmarks 
+        WHERE user_id = $1 AND session_id = $2 
+        RETURNING *
+      )
+      INSERT INTO session_bookmarks (user_id, session_id)
+      SELECT $1, $2 WHERE NOT EXISTS (SELECT 1 FROM deleted)
+      RETURNING *`,
       [userId, sessionId]
     );
 
-    if (rows[0].exists) {
-      // Remove bookmark
-      await pool.query(
-        'DELETE FROM session_bookmarks WHERE user_id = $1 AND session_id = $2',
-        [userId, sessionId]
-      );
-      return false;
-    } else {
-      // Add bookmark
-      await pool.query(
-        'INSERT INTO session_bookmarks (user_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-        [userId, sessionId]
-      );
-      return true;
-    }
+    // true = added (rowCount > 0), false = removed (rowCount = 0)
+    return rows.length > 0;
   }
 
   async getTopSessions(eventId: number, limit: number = 5): Promise<Array<SessionWithBookmark>> {

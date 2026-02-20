@@ -3,6 +3,22 @@ import pool from '../db/pool';
 import path from 'path';
 import fs from 'fs';
 
+/**
+ * Sanitize string to prevent Excel formula injection
+ * @param value Input value
+ * @returns Sanitized value safe for Excel
+ */
+function sanitizeForExcel(value: any): any {
+  if (typeof value !== 'string') return value;
+  
+  // Prefix dangerous chars with single quote to prevent formula execution
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return "'" + value;
+  }
+  
+  return value;
+}
+
 class ExportService {
   async generateExcel(eventId: number): Promise<string> {
     const workbook = new ExcelJS.Workbook();
@@ -57,12 +73,12 @@ class ExportService {
     rows.forEach(row => {
       sheet.addRow({
         id: row.id,
-        first_name: row.first_name,
-        last_name: row.last_name,
-        email: row.email,
-        phone: row.phone,
-        ticket_type: row.ticket_type,
-        status: row.status,
+        first_name: sanitizeForExcel(row.first_name),
+        last_name: sanitizeForExcel(row.last_name),
+        email: sanitizeForExcel(row.email),
+        phone: sanitizeForExcel(row.phone),
+        ticket_type: sanitizeForExcel(row.ticket_type),
+        status: sanitizeForExcel(row.status),
         created_at: row.created_at,
       });
     });
@@ -99,10 +115,10 @@ class ExportService {
     rows.forEach(row => {
       sheet.addRow({
         id: row.id,
-        participant: row.participant,
+        participant: sanitizeForExcel(row.participant),
         amount: row.amount,
-        status: row.status,
-        card_number: row.card_number ? `*${row.card_number.slice(-4)}` : '',
+        status: sanitizeForExcel(row.status),
+        card_number: sanitizeForExcel(row.card_number ? `*${row.card_number.slice(-4)}` : ''),
         created_at: row.created_at,
         confirmed_at: row.confirmed_at,
       });
@@ -136,9 +152,9 @@ class ExportService {
     rows.forEach(row => {
       sheet.addRow({
         id: row.id,
-        participant: row.participant,
+        participant: sanitizeForExcel(row.participant),
         checked_in_at: row.checked_in_at,
-        checked_by: row.checked_by,
+        checked_by: sanitizeForExcel(row.checked_by),
       });
     });
 
@@ -171,12 +187,12 @@ class ExportService {
     rows.forEach(row => {
       sheet.addRow({
         id: row.id,
-        title: row.title,
-        speaker_name: row.speaker_name,
-        location: row.location,
+        title: sanitizeForExcel(row.title),
+        speaker_name: sanitizeForExcel(row.speaker_name),
+        location: sanitizeForExcel(row.location),
         starts_at: row.starts_at,
         ends_at: row.ends_at,
-        track: row.track,
+        track: sanitizeForExcel(row.track),
         bookmark_count: row.bookmark_count,
       });
     });
