@@ -1,11 +1,13 @@
 import { Bot, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
-import { BotContext } from './context';
+import { BotContext, SessionData } from './context';
 import config from '../config';
 
 // Handlers
 import startHandler from './handlers/start';
 import adminHandler from './handlers/admin';
+import scannerHandler, { handleScanPhoto, handlePinInput } from './handlers/scanner';
+import { handleMyTicket, handleTicketCallback } from './handlers/ticket';
 
 // Conversations
 import { registrationConversation } from './conversations/registration';
@@ -19,7 +21,7 @@ const bot = new Bot<BotContext>(config.telegram.botToken);
 // Session
 bot.use(
   session({
-    initial: () => ({
+    initial: (): SessionData => ({
       currentEventId: undefined,
       currentEventSlug: undefined,
       registrationStep: undefined,
@@ -40,11 +42,17 @@ bot.use(createConversation(registrationConversation));
 // Commands
 bot.command('start', startHandler);
 bot.command('admin', adminHandler);
+bot.command('scan', scannerHandler);
+bot.command('cancel', async (ctx) => {
+  ctx.session.registrationStep = undefined;
+  await ctx.reply('❌ Операция отменена');
+});
 bot.command('help', (ctx) => {
   ctx.reply(
     '🤖 EventHub Bot\n\n' +
       '/start - Главное меню\n' +
       '/admin - Админ-панель\n' +
+      '/scan - QR-сканер (для волонтёров)\n' +
       '/help - Справка'
   );
 });
@@ -87,6 +95,30 @@ bot.callbackQuery(/^event:/, async (ctx) => {
   }
   await ctx.answerCallbackQuery();
 });
+
+bot.callbackQuery(/^myticket:/, async (ctx) => {
+  const eventId = parseInt(ctx.callbackQuery.data.split(':')[1], 10);
+  ctx.session.currentEventId = eventId;
+  await handleMyTicket(ctx);
+  await ctx.answerCallbackQuery();
+});
+
+bot.callbackQuery(/^select_ticket:/, handleTicketCallback);
+bot.callbackQuery(/^confirm_ticket$/, handleTicketCallback);
+
+bot.callbackQuery(/^scan_event:/, async (ctx) => {
+  const eventId = parseInt(ctx.callbackQuery.data.split(':')[1], 10);
+  const { startPinCheck } = await import('./handlers/scanner');
+  // @ts-ignore
+  await startPinCheck(ctx, eventId);
+  await ctx.answerCallbackQuery();
+});
+
+// Handle photos in scanning mode
+bot.on('message:photo', handleScanPhoto);
+
+// Handle text messages (PIN input, etc.)
+bot.on('message:text', handlePinInput);
 
 // Error handler (must be after all handlers)
 bot.catch(errorHandler);

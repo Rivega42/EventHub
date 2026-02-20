@@ -2,6 +2,8 @@ import { BotContext } from '../context';
 import { InlineKeyboard } from 'grammy';
 import eventService from '../../services/event.service';
 import paymentService from '../../services/payment.service';
+import eventPinService from '../../services/event-pin.service';
+import notificationService from '../../services/notification.service';
 import pool from '../../db/pool';
 
 export default async function adminHandler(ctx: BotContext): Promise<void> {
@@ -50,155 +52,213 @@ export default async function adminHandler(ctx: BotContext): Promise<void> {
 
 // Callback handlers for admin actions
 export async function handleAdminCallback(ctx: BotContext): Promise<void> {
-  const data = ctx.callbackQuery?.data;
-  if (!data) return;
+  try {
+    const data = ctx.callbackQuery?.data;
+    if (!data) return;
 
-  const parts = data.split(':');
-  const action = parts[1];
+    const parts = data.split(':');
+    const action = parts[1];
 
-  if (action === 'event' && parts[2]) {
-    const eventId = parseInt(parts[2], 10);
-    await showEventDashboard(ctx, eventId);
-  } else if (action === 'payments' && parts[2]) {
-    const eventId = parseInt(parts[2], 10);
-    await showPaymentQueue(ctx, eventId);
-  } else if (action === 'confirm_pay' && parts[2]) {
-    const paymentId = parseInt(parts[2], 10);
-    await confirmPayment(ctx, paymentId);
-  } else if (action === 'reject_pay' && parts[2]) {
-    const paymentId = parseInt(parts[2], 10);
-    await rejectPayment(ctx, paymentId);
+    if (action === 'event' && parts[2]) {
+      const eventId = parseInt(parts[2], 10);
+      await showEventDashboard(ctx, eventId);
+    } else if (action === 'payments' && parts[2]) {
+      const eventId = parseInt(parts[2], 10);
+      await showPaymentQueue(ctx, eventId);
+    } else if (action === 'confirm_pay' && parts[2]) {
+      const paymentId = parseInt(parts[2], 10);
+      await confirmPayment(ctx, paymentId);
+    } else if (action === 'reject_pay' && parts[2]) {
+      const paymentId = parseInt(parts[2], 10);
+      await rejectPayment(ctx, paymentId);
+    } else if (action === 'generate_pin' && parts[2]) {
+      const eventId = parseInt(parts[2], 10);
+      await generateCheckinPin(ctx, eventId);
+    } else if (action === 'stats' && parts[2]) {
+      const eventId = parseInt(parts[2], 10);
+      await sendEventStats(ctx, eventId);
+    } else if (action === 'back') {
+      await adminHandler(ctx);
+    }
+
+    await ctx.answerCallbackQuery();
+  } catch (err) {
+    console.error('Error in handleAdminCallback:', err);
+    await ctx.answerCallbackQuery({ text: '❌ Ошибка' });
   }
-
-  await ctx.answerCallbackQuery();
 }
 
 async function showEventDashboard(ctx: BotContext, eventId: number): Promise<void> {
-  const event = await eventService.findById(eventId);
-  if (!event) {
-    await ctx.reply('❌ Мероприятие не найдено');
-    return;
+  try {
+    const event = await eventService.findById(eventId);
+    if (!event) {
+      await ctx.reply('❌ Мероприятие не найдено');
+      return;
+    }
+
+    const stats = await eventService.getStats(eventId);
+    const cardStats = await paymentService.getCardStats(eventId);
+
+    let message = `📊 ${event.title}\n\n`;
+    message += `🎫 Регистраций: ${stats.total}\n`;
+    message += `✅ Подтверждено: ${stats.confirmed}\n`;
+    message += `🚶 Пришло: ${stats.checkedIn}\n\n`;
+
+    if (cardStats.length > 0) {
+      message += `💰 Деньги:\n`;
+      cardStats.forEach((card) => {
+        message += `  └ Карта *${card.card_number.slice(-4)}: ${card.total_amount} ₽ (${card.payment_count} оплат)\n`;
+      });
+    }
+
+    const keyboard = new InlineKeyboard()
+      .text('🎫 Билеты и оплаты', `admin:payments:${eventId}`)
+      .row()
+      .text('📋 Программа', `admin:schedule:${eventId}`)
+      .text('💳 Карты оплаты', `admin:cards:${eventId}`)
+      .row()
+      .text('👥 Участники', `admin:registrations:${eventId}`)
+      .text('📢 Рассылка', `admin:broadcast:${eventId}`)
+      .row()
+      .text('🔑 Генерировать PIN', `admin:generate_pin:${eventId}`)
+      .text('📊 Статистика', `admin:stats:${eventId}`)
+      .row()
+      .text('« Назад', 'admin:back');
+
+    await ctx.editMessageText(message, { reply_markup: keyboard });
+  } catch (err) {
+    console.error('Error in showEventDashboard:', err);
+    await ctx.reply('❌ Ошибка при загрузке данных');
   }
+}
 
-  const stats = await eventService.getStats(eventId);
-  const cardStats = await paymentService.getCardStats(eventId);
+async function generateCheckinPin(ctx: BotContext, eventId: number): Promise<void> {
+  try {
+    const pin = await eventPinService.generatePin(eventId);
 
-  let message = `📊 ${event.title}\n\n`;
-  message += `🎫 Регистраций: ${stats.total}\n`;
-  message += `✅ Подтверждено: ${stats.confirmed}\n`;
-  message += `🚶 Пришло: ${stats.checkedIn}\n\n`;
-
-  if (cardStats.length > 0) {
-    message += `💰 Деньги:\n`;
-    cardStats.forEach((card) => {
-      message += `  └ Карта *${card.card_number.slice(-4)}: ${card.total_amount} ₽ (${card.payment_count} оплат)\n`;
-    });
+    await ctx.editMessageText(
+      `🔑 PIN для check-in сгенерирован:\n\n` +
+        `<code>${pin}</code>\n\n` +
+        `Волонтёры должны ввести этот PIN при запуске команды /scan.\n` +
+        `PIN можно изменить в любое время.`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard().text('« Назад', `admin:event:${eventId}`),
+      }
+    );
+  } catch (err) {
+    console.error('Error in generateCheckinPin:', err);
+    await ctx.reply('❌ Ошибка при генерации PIN');
   }
+}
 
-  const keyboard = new InlineKeyboard()
-    .text('🎫 Билеты и оплаты', `admin:payments:${eventId}`)
-    .row()
-    .text('📋 Программа', `admin:schedule:${eventId}`)
-    .text('💳 Карты оплаты', `admin:cards:${eventId}`)
-    .row()
-    .text('👥 Участники', `admin:registrations:${eventId}`)
-    .text('📢 Рассылка', `admin:broadcast:${eventId}`)
-    .row()
-    .text('« Назад', 'admin:back');
-
-  await ctx.editMessageText(message, { reply_markup: keyboard });
+async function sendEventStats(ctx: BotContext, eventId: number): Promise<void> {
+  try {
+    await notificationService.sendEventSummary(ctx.api, eventId);
+    await ctx.answerCallbackQuery({ text: '📊 Статистика отправлена в личные сообщения' });
+  } catch (err) {
+    console.error('Error in sendEventStats:', err);
+    await ctx.answerCallbackQuery({ text: '❌ Ошибка' });
+  }
 }
 
 async function showPaymentQueue(ctx: BotContext, eventId: number): Promise<void> {
-  const pending = await paymentService.findPendingByEvent(eventId);
+  try {
+    const pending = await paymentService.findPendingByEvent(eventId);
 
-  if (pending.length === 0) {
-    await ctx.editMessageText('✅ Нет ожидающих подтверждения оплат', {
-      reply_markup: new InlineKeyboard().text('« Назад', `admin:event:${eventId}`),
-    });
-    return;
-  }
+    if (pending.length === 0) {
+      await ctx.editMessageText('✅ Нет ожидающих подтверждения оплат', {
+        reply_markup: new InlineKeyboard().text('« Назад', `admin:event:${eventId}`),
+      });
+      return;
+    }
 
-  const payment = pending[0];
-  const keyboard = new InlineKeyboard()
-    .text('✅ Подтвердить', `admin:confirm_pay:${payment.id}`)
-    .text('❌ Отклонить', `admin:reject_pay:${payment.id}`)
-    .row()
-    .text(`Следующий (${pending.length - 1})`, `admin:payments:${eventId}`)
-    .row()
-    .text('« Назад', `admin:event:${eventId}`);
+    const payment = pending[0];
+    const keyboard = new InlineKeyboard()
+      .text('✅ Подтвердить', `admin:confirm_pay:${payment.id}`)
+      .text('❌ Отклонить', `admin:reject_pay:${payment.id}`)
+      .row()
+      .text(`Следующий (${pending.length - 1})`, `admin:payments:${eventId}`)
+      .row()
+      .text('« Назад', `admin:event:${eventId}`);
 
-  await ctx.editMessageText(
-    `💳 Ожидает подтверждения:\n\n` +
-      `👤 ${payment.first_name} ${payment.last_name}\n` +
-      `🎫 ${payment.ticket_type_name}\n` +
-      `💰 ${payment.amount} ₽\n` +
-      `💳 Карта *${payment.card_number?.slice(-4) || '????'}\n\n` +
-      `Скриншот прикреплен ниже.`,
-    { reply_markup: keyboard }
-  );
+    await ctx.editMessageText(
+      `💳 Ожидает подтверждения:\n\n` +
+        `👤 ${payment.first_name} ${payment.last_name}\n` +
+        `🎫 ${payment.ticket_type_name}\n` +
+        `💰 ${payment.amount} ₽\n` +
+        `💳 Карта *${payment.card_number?.slice(-4) || '????'}\n\n` +
+        `Скриншот прикреплен ниже.`,
+      { reply_markup: keyboard }
+    );
 
-  if (payment.screenshot_file_id) {
-    await ctx.replyWithPhoto(payment.screenshot_file_id);
+    if (payment.screenshot_file_id) {
+      await ctx.replyWithPhoto(payment.screenshot_file_id);
+    }
+  } catch (err) {
+    console.error('Error in showPaymentQueue:', err);
+    await ctx.reply('❌ Ошибка при загрузке очереди оплат');
   }
 }
 
 async function confirmPayment(ctx: BotContext, paymentId: number): Promise<void> {
-  if (!ctx.userId) return;
+  try {
+    if (!ctx.userId) return;
 
-  await paymentService.confirm(paymentId, ctx.userId);
-  await ctx.answerCallbackQuery({ text: '✅ Оплата подтверждена!' });
+    // Import ticket service
+    const ticketService = (await import('../../services/ticket.service')).default;
 
-  // Notify user
-  const payment = await paymentService.findById(paymentId);
-  if (payment) {
-    const { rows } = await pool.query(
-      'SELECT u.telegram_id FROM users u JOIN registrations r ON u.id = r.user_id WHERE r.id = $1',
-      [payment.registration_id]
+    // Confirm payment and send ticket
+    await paymentService.confirm(paymentId, ctx.userId, async (registrationId) => {
+      await ticketService.sendTicket(ctx.api, registrationId);
+    });
+
+    await ctx.answerCallbackQuery({ text: '✅ Оплата подтверждена!' });
+
+    // Reload payment queue
+    const { rows: eventRows } = await pool.query(
+      'SELECT r.event_id FROM registrations r JOIN payments p ON r.id = p.registration_id WHERE p.id = $1',
+      [paymentId]
     );
-    if (rows[0]) {
-      await ctx.api.sendMessage(
-        rows[0].telegram_id,
-        '🎉 Ваша оплата подтверждена! Билет готов.'
-      );
+    if (eventRows[0]) {
+      await showPaymentQueue(ctx, eventRows[0].event_id);
     }
-  }
-
-  // Reload payment queue
-  const { rows: eventRows } = await pool.query(
-    'SELECT r.event_id FROM registrations r JOIN payments p ON r.id = p.registration_id WHERE p.id = $1',
-    [paymentId]
-  );
-  if (eventRows[0]) {
-    await showPaymentQueue(ctx, eventRows[0].event_id);
+  } catch (err) {
+    console.error('Error in confirmPayment:', err);
+    await ctx.answerCallbackQuery({ text: '❌ Ошибка' });
   }
 }
 
 async function rejectPayment(ctx: BotContext, paymentId: number): Promise<void> {
-  await paymentService.reject(paymentId, 'Отклонено администратором');
-  await ctx.answerCallbackQuery({ text: '❌ Оплата отклонена' });
+  try {
+    await paymentService.reject(paymentId, 'Отклонено администратором');
+    await ctx.answerCallbackQuery({ text: '❌ Оплата отклонена' });
 
-  // Notify user
-  const payment = await paymentService.findById(paymentId);
-  if (payment) {
-    const { rows } = await pool.query(
-      'SELECT u.telegram_id FROM users u JOIN registrations r ON u.id = r.user_id WHERE r.id = $1',
-      [payment.registration_id]
-    );
-    if (rows[0]) {
-      await ctx.api.sendMessage(
-        rows[0].telegram_id,
-        '❌ Оплата отклонена. Попробуйте ещё раз или обратитесь в поддержку.'
+    // Notify user
+    const payment = await paymentService.findById(paymentId);
+    if (payment) {
+      const { rows } = await pool.query(
+        'SELECT u.telegram_id FROM users u JOIN registrations r ON u.id = r.user_id WHERE r.id = $1',
+        [payment.registration_id]
       );
+      if (rows[0]) {
+        await ctx.api.sendMessage(
+          rows[0].telegram_id,
+          '❌ Оплата отклонена. Попробуйте ещё раз или обратитесь в поддержку.'
+        );
+      }
     }
-  }
 
-  // Reload payment queue
-  const { rows: eventRows } = await pool.query(
-    'SELECT r.event_id FROM registrations r JOIN payments p ON r.id = p.registration_id WHERE p.id = $1',
-    [paymentId]
-  );
-  if (eventRows[0]) {
-    await showPaymentQueue(ctx, eventRows[0].event_id);
+    // Reload payment queue
+    const { rows: eventRows } = await pool.query(
+      'SELECT r.event_id FROM registrations r JOIN payments p ON r.id = p.registration_id WHERE p.id = $1',
+      [paymentId]
+    );
+    if (eventRows[0]) {
+      await showPaymentQueue(ctx, eventRows[0].event_id);
+    }
+  } catch (err) {
+    console.error('Error in rejectPayment:', err);
+    await ctx.answerCallbackQuery({ text: '❌ Ошибка' });
   }
 }

@@ -1,12 +1,12 @@
-import { Conversation, ConversationFlavor } from '@grammyjs/conversations';
+import { Conversation } from '@grammyjs/conversations';
 import { BotContext } from '../context';
-import { InputFile } from "grammy";
 import { InlineKeyboard } from 'grammy';
 import registrationService from '../../services/registration.service';
 import paymentService from '../../services/payment.service';
 import cardRotationService from '../../services/card-rotation.service';
-import qrService from '../../services/qr.service';
 import userService from '../../services/user.service';
+import notificationService from '../../services/notification.service';
+import ticketService from '../../services/ticket.service';
 import pool from '../../db/pool';
 
 export async function registrationConversation(
@@ -35,8 +35,18 @@ export async function registrationConversation(
 
   // Step 2: Email
   await ctx.reply('📧 Ваш email?');
-  const emailCtx = await conversation.waitFor('message:text');
-  const email = emailCtx.message.text.trim();
+  let email = '';
+  while (!email) {
+    const emailCtx = await conversation.waitFor('message:text');
+    const inputEmail = emailCtx.message.text.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    if (emailRegex.test(inputEmail)) {
+      email = inputEmail;
+    } else {
+      await ctx.reply('❌ Некорректный email. Попробуйте снова:');
+    }
+  }
 
   // Step 3: Phone
   await ctx.reply('📱 Телефон?', {
@@ -46,9 +56,18 @@ export async function registrationConversation(
       one_time_keyboard: true,
     },
   });
-  const phoneCtx = await conversation.waitFor(['message:contact', 'message:text']);
-  const phone =
-    phoneCtx.message.contact?.phone_number || phoneCtx.message.text?.trim() || '';
+  let phone = '';
+  while (!phone) {
+    const phoneCtx = await conversation.waitFor(['message:contact', 'message:text']);
+    const inputPhone = phoneCtx.message.contact?.phone_number || phoneCtx.message.text?.trim() || '';
+    const phoneDigits = inputPhone.replace(/\D/g, '');
+    
+    if (phoneDigits.length >= 10) {
+      phone = inputPhone;
+    } else {
+      await ctx.reply('❌ Некорректный телефон. Минимум 10 цифр. Попробуйте снова:');
+    }
+  }
 
   // Step 4: Company (optional)
   const skipKeyboard = new InlineKeyboard().text('Пропустить', 'skip_company');
@@ -110,13 +129,18 @@ export async function registrationConversation(
     reg_data: { fullName, email, phone, company },
   });
 
+  // Notify organizers about new registration
+  await conversation.external(async () => {
+    await notificationService.notifyNewRegistration(ctx.api, eventId, registration.id);
+  });
+
   // If free ticket, send QR immediately
   if (selectedTicket.price === 0) {
     await registrationService.updateStatus(registration.id, 'confirmed');
-    const qrImage = await qrService.generateQrImage(registration.qr_token);
-    await ctx.replyWithPhoto(new InputFile(qrImage, 'ticket.png'), {
-      caption: '✅ Вы зарегистрированы! Вот ваш билет:\n\nПокажите QR-код на входе.',
+    await conversation.external(async () => {
+      await ticketService.sendFreeTicket(ctx.api, registration.id);
     });
+    await ctx.reply('✅ Вы зарегистрированы! Билет отправлен выше.');
     return;
   }
 
@@ -142,6 +166,12 @@ export async function registrationConversation(
   const photo = screenshotCtx.message.photo?.pop();
   if (photo) {
     await paymentService.updateScreenshot(payment.id, photo.file_id);
+
+    // Notify organizers about payment screenshot
+    await conversation.external(async () => {
+      await notificationService.notifyPaymentScreenshot(ctx.api, eventId, payment.id);
+    });
+
     await ctx.reply(
       '✅ Скриншот получен! Ожидайте подтверждения (обычно 1-2 часа).\n\n' +
         'Вы получите уведомление, когда оплата будет подтверждена.'

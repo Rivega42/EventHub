@@ -24,8 +24,10 @@
     "dotenv": "^16.4.1",
     "fastify": "^4.26.1",
     "grammy": "^1.21.1",
+    "jsqr": "^1.4.0",
     "pg": "^8.11.3",
     "qrcode": "^1.5.3",
+    "sharp": "^0.34.5",
     "zod": "^3.22.4"
   },
   "devDependencies": {

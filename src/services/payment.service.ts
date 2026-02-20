@@ -80,7 +80,11 @@ class PaymentService {
     return rows[0];
   }
 
-  async confirm(id: number, confirmedBy: number): Promise<Payment> {
+  async confirm(
+    id: number,
+    confirmedBy: number,
+    sendTicketCallback?: (registrationId: number) => Promise<void>
+  ): Promise<Payment> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -105,6 +109,17 @@ class PaymentService {
       );
 
       await client.query('COMMIT');
+
+      // Send QR ticket to user (if callback provided)
+      if (sendTicketCallback) {
+        try {
+          await sendTicketCallback(payment.registration_id);
+        } catch (err) {
+          console.error('Failed to send ticket:', err);
+          // Don't fail the confirmation if ticket sending fails
+        }
+      }
+
       return payment;
     } catch (err) {
       await client.query('ROLLBACK');

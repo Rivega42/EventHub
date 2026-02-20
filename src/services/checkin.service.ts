@@ -55,8 +55,18 @@ class CheckinService {
 
       await client.query('COMMIT');
       return rows[0];
-    } catch (err) {
+    } catch (err: any) {
       await client.query('ROLLBACK');
+      
+      // Handle race condition: duplicate check-in attempt
+      if (err.code === '23505' && err.constraint === 'unique_registration_checkin') {
+        // Return existing check-in instead of throwing
+        const existing = await this.findByRegistration(registrationId);
+        if (existing) {
+          return existing;
+        }
+      }
+      
       throw err;
     } finally {
       client.release();
