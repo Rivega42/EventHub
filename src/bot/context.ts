@@ -6,6 +6,17 @@ export interface SessionData {
   currentEventSlug?: string;
   registrationStep?: string;
   paymentId?: number;
+  pendingFeedback?: {
+    sessionId: number;
+    rating: number;
+  };
+  surveyState?: {
+    eventId: number;
+    overallRating?: number;
+    bestSessionId?: number | null;
+    improvement?: string | null;
+  };
+  awaitingImprovement?: boolean;
 }
 
 export type BotContext = Context & SessionFlavor<SessionData> & ConversationFlavor & {

@@ -2,6 +2,7 @@ import { BotContext } from '../context';
 import { InlineKeyboard } from 'grammy';
 import sessionService from '../../services/session.service';
 import eventService from '../../services/event.service';
+import feedbackService from '../../services/feedback.service';
 
 export default async function scheduleHandler(ctx: BotContext): Promise<void> {
   try {
@@ -233,10 +234,22 @@ async function showSessionDetail(ctx: BotContext, sessionId: number): Promise<vo
     message += `\n${session.description}\n`;
   }
 
+  // Get feedback stats
+  const feedbackStats = await feedbackService.getSessionStats(sessionId);
+  if (feedbackStats.totalCount > 0) {
+    message += `\n📊 <b>Рейтинг:</b> ${feedbackStats.averageRating.toFixed(1)} / 5.0 `;
+    message += `(${'⭐️'.repeat(Math.round(feedbackStats.averageRating))}) `;
+    message += `(${feedbackStats.totalCount} отзывов)\n`;
+  }
+
   const keyboard = new InlineKeyboard();
   
   const bookmarkText = sessionWithBookmark?.is_bookmarked ? '⭐️ Удалить из избранного' : '⭐️ Добавить в избранное';
   keyboard.text(bookmarkText, `schedule:bookmark:${session.event_id}:${sessionId}`).row();
+  
+  // Add feedback button (always available)
+  keyboard.text('📊 Оценить доклад', `feedback:rate:${sessionId}`).row();
+  
   keyboard.text('🔔 Напомнить за 15 мин', `schedule:remind:${session.event_id}:${sessionId}`).row();
   keyboard.text('« Назад', `schedule:all:${session.event_id}`);
 

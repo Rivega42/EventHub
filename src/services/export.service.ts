@@ -35,6 +35,12 @@ class ExportService {
     // Sheet 4: Sessions
     await this.createSessionsSheet(workbook, eventId);
 
+    // Sheet 5: Session Feedback
+    await this.createFeedbackSheet(workbook, eventId);
+
+    // Sheet 6: Event Surveys
+    await this.createSurveysSheet(workbook, eventId);
+
     // Save file
     const filename = `export_${eventId}_${Date.now()}.xlsx`;
     const filepath = path.join('/tmp', filename);
@@ -194,6 +200,90 @@ class ExportService {
         ends_at: row.ends_at,
         track: sanitizeForExcel(row.track),
         bookmark_count: row.bookmark_count,
+      });
+    });
+
+    sheet.getRow(1).font = { bold: true };
+  }
+
+  private async createFeedbackSheet(workbook: ExcelJS.Workbook, eventId: number): Promise<void> {
+    const sheet = workbook.addWorksheet('Фидбек по докладам');
+
+    sheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Доклад', key: 'session_title', width: 40 },
+      { header: 'Спикер', key: 'speaker_name', width: 30 },
+      { header: 'Участник', key: 'participant', width: 30 },
+      { header: 'Рейтинг', key: 'rating', width: 10 },
+      { header: 'Комментарий', key: 'comment', width: 50 },
+      { header: 'Дата', key: 'created_at', width: 20 },
+    ];
+
+    const { rows } = await pool.query(
+      `SELECT sf.id, s.title as session_title, s.speaker_name,
+              u.first_name || ' ' || u.last_name as participant,
+              sf.rating, sf.comment, sf.created_at
+       FROM session_feedback sf
+       JOIN sessions s ON sf.session_id = s.id
+       JOIN users u ON sf.user_id = u.id
+       WHERE s.event_id = $1
+       ORDER BY sf.created_at DESC`,
+      [eventId]
+    );
+
+    rows.forEach(row => {
+      sheet.addRow({
+        id: row.id,
+        session_title: sanitizeForExcel(row.session_title),
+        speaker_name: sanitizeForExcel(row.speaker_name),
+        participant: sanitizeForExcel(row.participant),
+        rating: row.rating,
+        comment: sanitizeForExcel(row.comment),
+        created_at: row.created_at,
+      });
+    });
+
+    sheet.getRow(1).font = { bold: true };
+  }
+
+  private async createSurveysSheet(workbook: ExcelJS.Workbook, eventId: number): Promise<void> {
+    const sheet = workbook.addWorksheet('Опросы участников');
+
+    sheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Участник', key: 'participant', width: 30 },
+      { header: 'Общая оценка', key: 'overall_rating', width: 15 },
+      { header: 'Лучший доклад', key: 'best_session', width: 40 },
+      { header: 'Что улучшить', key: 'improvement', width: 50 },
+      { header: 'Порекомендует', key: 'would_recommend', width: 15 },
+      { header: 'Дата', key: 'created_at', width: 20 },
+    ];
+
+    const { rows } = await pool.query(
+      `SELECT es.id,
+              u.first_name || ' ' || u.last_name as participant,
+              es.overall_rating,
+              s.title as best_session,
+              es.improvement,
+              es.would_recommend,
+              es.created_at
+       FROM event_surveys es
+       JOIN users u ON es.user_id = u.id
+       LEFT JOIN sessions s ON es.best_session_id = s.id
+       WHERE es.event_id = $1
+       ORDER BY es.created_at DESC`,
+      [eventId]
+    );
+
+    rows.forEach(row => {
+      sheet.addRow({
+        id: row.id,
+        participant: sanitizeForExcel(row.participant),
+        overall_rating: row.overall_rating,
+        best_session: sanitizeForExcel(row.best_session),
+        improvement: sanitizeForExcel(row.improvement),
+        would_recommend: row.would_recommend ? 'Да' : 'Нет',
+        created_at: row.created_at,
       });
     });
 

@@ -2,6 +2,7 @@ import { BotContext } from '../context';
 import { InlineKeyboard } from 'grammy';
 import eventService from '../../services/event.service';
 import sessionService from '../../services/session.service';
+import surveyService from '../../services/survey.service';
 import pool from '../../db/pool';
 
 export default async function dashboardHandler(ctx: BotContext): Promise<void> {
@@ -155,6 +156,41 @@ export async function showDashboard(ctx: BotContext, eventId: number): Promise<v
         message += `${icon} ${session.title} (${session.bookmark_count} ⭐️)\n`;
       });
       message += '\n';
+    }
+
+    // Survey stats
+    const surveyStats = await surveyService.getEventStats(eventId);
+    if (surveyStats.totalResponses > 0) {
+      message += `<b>📋 Опрос участников:</b>\n`;
+      message += `├ Ответов: ${surveyStats.totalResponses}\n`;
+      message += `├ Средняя оценка: ${surveyStats.averageRating.toFixed(1)} / 5.0\n`;
+      message += `└ Порекомендуют: ${surveyStats.recommendPercentage}%\n`;
+      
+      if (surveyStats.topSessions.length > 0) {
+        const topSession = surveyStats.topSessions[0];
+        message += `🏆 Лучший доклад: ${topSession.title} (${topSession.votes} голосов)\n`;
+      }
+      message += '\n';
+    }
+
+    // Feedback stats (average across all sessions)
+    const { rows: feedbackStats } = await pool.query(
+      `SELECT 
+        COUNT(*) as total_feedback,
+        COALESCE(AVG(rating), 0) as avg_rating
+       FROM session_feedback sf
+       JOIN sessions s ON sf.session_id = s.id
+       WHERE s.event_id = $1`,
+      [eventId]
+    );
+    
+    const totalFeedback = parseInt(feedbackStats[0].total_feedback, 10);
+    const avgRating = parseFloat(feedbackStats[0].avg_rating);
+    
+    if (totalFeedback > 0) {
+      message += `<b>📊 Фидбек по докладам:</b>\n`;
+      message += `├ Всего отзывов: ${totalFeedback}\n`;
+      message += `└ Средний рейтинг: ${avgRating.toFixed(1)} / 5.0\n\n`;
     }
 
     const keyboard = new InlineKeyboard()
